@@ -11,7 +11,10 @@ process.on('unhandledRejection', (error) => {
 // 録音テスト用の関数
 async function testRecording() {
   console.log('=== 録音テストを開始します ===');
-  console.log('設定情報:', config.audio);
+  console.log('\n利用可能なデバイス候補:');
+  config.audio.devices.forEach((device, index) => {
+    console.log(`${index + 1}. ${device}`);
+  });
   
   // 保存ディレクトリの確認と作成
   if (!fs.existsSync(config.paths.audio)) {
@@ -22,9 +25,9 @@ async function testRecording() {
   const recorder = new AudioRecorder();
   
   try {
-    // 録音開始
-    console.log('\n録音を開始します...');
-    recorder.start();
+  // 録音開始
+  console.log('\n録音を開始します...');
+  await recorder.start();
 
     // 30秒後に録音を停止
     await new Promise((resolve) => {
@@ -71,6 +74,22 @@ async function testRecording() {
   }
 }
 
+// SOXのデバッグ出力を有効化
+process.env.DEBUG = 'node-mic';
+
 // テスト実行
 console.log('Node.jsバージョン:', process.version);
+console.log('デバッグモード:', process.env.DEBUG);
+
+// 未処理のエラーをキャッチ
+process.on('uncaughtException', (error) => {
+  console.error('\n=== 未処理のエラー ===');
+  console.error('エラーの詳細:', {
+    message: error.message,
+    stack: error.stack,
+    code: error.code
+  });
+  process.exit(1);
+});
+
 testRecording();

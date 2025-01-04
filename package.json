@@ -8,7 +8,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/index.js",
     "test:recorder": "node src/test-recorder.js",
-    "test:mic": "node src/test-mic.js"
+    "test:mic": "node src/test-mic.js",
+    "test:transcriber": "node src/test-transcriber.js",
+    "transcribe": "node src/test-transcriber.js"
   },
   "repository": {
     "type": "git",
@@ -27,7 +29,8 @@
   "homepage": "https://github.com/kawaguti/shaberin#readme",
   "dependencies": {
     "discord.js": "^14.11.0",
+    "dotenv": "^16.4.7",
     "node-mic": "^1.0.1",
-    "openai": "^3.3.0"
+    "openai": "^4.0.0"
   }
 }
