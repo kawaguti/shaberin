@@ -30,27 +30,22 @@ async function summarizeTranscripts() {
             return;
         }
 
+        // 時系列順にソート
+        allContents.sort((a, b) => {
+            const timeA = a.filename.match(/\d+/);
+            const timeB = b.filename.match(/\d+/);
+            return (timeA && timeB) ? Number(timeA[0]) - Number(timeB[0]) : 0;
+        });
+
         // 全てのコンテンツをまとめる
-        const combinedText = allContents.map(item => 
-            `=== ${item.filename} ===\n${item.content}`
-        ).join('\n\n');
+        const combinedText = allContents.map(item => item.content).join('\n');
 
         // まとめたテキストを要約
         console.log('\nテキストを要約中...');
         const summary = await summarizer.summarize(combinedText);
-        const keywords = await summarizer.extractKeywords(combinedText, 10);
 
-        // 結果を整形
-        const result = [
-            '=== 全体の要約 ===',
-            summary,
-            '',
-            '=== 重要なキーワード ===',
-            keywords.join(', '),
-            '',
-            '=== 元のテキスト ===',
-            combinedText
-        ].join('\n');
+        // Discord用に整形
+        const result = summary;
 
         // タイムスタンプを含むファイル名を生成
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
