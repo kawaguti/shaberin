@@ -1,0 +1,33 @@
+{
+  "name": "shaberin",
+  "version": "1.0.0",
+  "description": "音声を文字起こしてDiscordに投稿するツール",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node src/index.js",
+    "test:recorder": "node src/test-recorder.js",
+    "test:mic": "node src/test-mic.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kawaguti/shaberin.git"
+  },
+  "keywords": [
+    "voice",
+    "transcription",
+    "discord"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kawaguti/shaberin/issues"
+  },
+  "homepage": "https://github.com/kawaguti/shaberin#readme",
+  "dependencies": {
+    "discord.js": "^14.11.0",
+    "node-mic": "^1.0.1",
+    "openai": "^3.3.0"
+  }
+}
