@@ -5,6 +5,8 @@ if (!process.env.OPENAI_API_KEY) {
   console.warn('警告: OPENAI_API_KEYが設定されていません');
 }
 
+export const API_BASE_URL = 'https://lunge-conf.replit.app';
+
 export const config = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
@@ -28,7 +30,8 @@ export const config = {
     encoding: 'signed-integer',
     bitDepth: 16,
     fileFormat: 'wav',
-    duration: 60,        // 60秒ごとに区切る
+    duration: 30,        // 30秒ごとに区切る
+    maxFileSize: 25 * 1024 * 1024,  // 最大ファイルサイズ（25MB）
   },
   paths: {
     audio: 'data/sound',

@@ -10,7 +10,8 @@
     "test:recorder": "node src/test-recorder.js",
     "test:mic": "node src/test-mic.js",
     "test:transcriber": "node src/test-transcriber.js",
-    "transcribe": "node src/test-transcriber.js"
+    "transcribe": "node src/test-transcriber.js",
+    "record": "node src/record-and-upload.js"
   },
   "repository": {
     "type": "git",
@@ -28,8 +29,11 @@
   },
   "homepage": "https://github.com/kawaguti/shaberin#readme",
   "dependencies": {
+    "audio-recorder": "^0.8.0",
     "discord.js": "^14.11.0",
     "dotenv": "^16.4.7",
+    "form-data": "^4.0.1",
+    "node-fetch": "^2.7.0",
     "node-mic": "^1.0.1",
     "node-summarizer": "^1.0.7",
     "openai": "^4.0.0"

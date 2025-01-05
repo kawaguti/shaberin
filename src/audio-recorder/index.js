@@ -1,7 +1,9 @@
 import mic from 'node-mic';
 import fs from 'fs';
 import path from 'path';
-import { config } from '../config.js';
+import fetch from 'node-fetch';
+import FormData from 'form-data';
+import { config, API_BASE_URL } from '../config.js';
 
 export class AudioRecorder {
   constructor() {
@@ -10,6 +12,54 @@ export class AudioRecorder {
     this.startTime = null;
     this.recorder = null;
     this.currentDevice = null;
+    this.isUploading = false;
+    this.lastUploadError = null;
+    this.currentInputStream = null;
+    this.currentOutputStream = null;
+    this.currentInterval = null;
+  }
+
+  async uploadFile(filePath) {
+    this.isUploading = true;
+    this.lastUploadError = null;
+
+    try {
+      console.log(`\nファイルをアップロード中: ${filePath}`);
+      const formData = new FormData();
+      const fileStream = fs.createReadStream(filePath);
+      
+      // ファイルストリームのエラーハンドリング
+      fileStream.on('error', (error) => {
+        throw new Error(`ファイル読み込みエラー: ${error.message}`);
+      });
+
+      formData.append('file', fileStream, {
+        filename: path.basename(filePath),
+        contentType: 'audio/wav',
+        knownLength: fs.statSync(filePath).size
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+        method: 'POST',
+        body: formData,
+        headers: formData.getHeaders()
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '詳細なエラー情報を取得できませんでした');
+        throw new Error(`アップロードエラー: ${response.status} ${response.statusText}\n${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('アップロード成功:', result);
+      return result;
+    } catch (error) {
+      this.lastUploadError = error;
+      console.error('アップロードエラー:', error);
+      throw error;
+    } finally {
+      this.isUploading = false;
+    }
   }
 
   // 利用可能なデバイスを試行
@@ -125,6 +175,19 @@ export class AudioRecorder {
   }
 
   setupRecorder() {
+    // クリーンアップ用の変数
+    if (this.currentInterval) {
+      clearInterval(this.currentInterval);
+    }
+    if (this.currentInputStream) {
+      this.currentInputStream.removeAllListeners();
+      this.currentInputStream.destroy();
+    }
+    if (this.currentOutputStream) {
+      this.currentOutputStream.removeAllListeners();
+      this.currentOutputStream.end();
+    }
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     this.currentFile = path.join(config.paths.audio, `audio-${timestamp}.wav`);
 
@@ -154,27 +217,76 @@ export class AudioRecorder {
       fileType: config.audio.fileFormat,
     });
 
-    const outputStream = fs.createWriteStream(this.currentFile, { flags: 'w' });
-    const inputStream = this.recorder.getAudioStream();
+    this.currentOutputStream = fs.createWriteStream(this.currentFile, { flags: 'w' });
+    this.currentInputStream = this.recorder.getAudioStream();
 
     // データ受信の監視
     let totalBytes = 0;
+    let fileBytes = 0;
     let lastLogTime = Date.now();
     
-    inputStream.on('data', (data) => {
+    const createNewRecording = async () => {
+      // 現在のファイルパスを保存
+      const completedFile = this.currentFile;
+
+      // 現在のストリームを適切にクローズ
+      if (this.currentOutputStream) {
+        this.currentOutputStream.end();
+        // ストリームが完全に閉じられるのを待つ
+        await new Promise(resolve => {
+          const finishHandler = () => {
+            this.currentOutputStream.removeListener('finish', finishHandler);
+            resolve();
+          };
+          this.currentOutputStream.once('finish', finishHandler);
+        });
+        
+        // ファイルをアップロード
+        try {
+          await this.uploadFile(completedFile);
+        } catch (error) {
+          console.error('ファイルのアップロードに失敗しました:', error);
+        }
+      }
+
+      if (this.recorder) {
+        this.recorder.stop();
+      }
+
+      // 少し待ってから新しいレコーダーをセットアップ
+      setTimeout(() => {
+        if (this.isRecording) {
+          this.setupRecorder();
+        }
+      }, 100);
+    };
+    
+    this.currentInputStream.on('data', async (data) => {
+      if (!this.isRecording) return;
+      
       totalBytes += data.length;
+      fileBytes += data.length;
       const now = Date.now();
       
       // 1秒ごとにログを出力
       if (now - lastLogTime >= 1000) {
-        console.log(`音声データ受信中... (${Math.round(totalBytes / 1024)} KB)`);
+        process.stdout.write(`\r音声データ受信中 (${Math.round(totalBytes / 1024)} KB)`);
         lastLogTime = now;
         totalBytes = 0;
+      } else {
+        process.stdout.write('.');
+      }
+
+      // ファイルサイズが制限に達した場合、新しいファイルを作成
+      if (fileBytes >= config.audio.maxFileSize) {
+        console.log(`ファイルサイズが制限(${config.audio.maxFileSize / 1024 / 1024}MB)に達しました。新しいファイルを作成します。`);
+        await createNewRecording();
+        fileBytes = 0;
       }
     });
 
     // エラーハンドリング
-    inputStream.on('error', error => {
+    this.currentInputStream.on('error', error => {
       console.error('録音エラー:', error);
       console.error('エラーの詳細:', {
         message: error.message,
@@ -184,7 +296,7 @@ export class AudioRecorder {
       this.stop();
     });
 
-    outputStream.on('error', error => {
+    this.currentOutputStream.on('error', error => {
       console.error('ファイル書き込みエラー:', error);
       console.error('エラーの詳細:', {
         message: error.message,
@@ -195,17 +307,17 @@ export class AudioRecorder {
     });
 
     // 録音ストリームの状態監視
-    inputStream.on('startComplete', () => {
+    this.currentInputStream.on('startComplete', () => {
       console.log('\n=== 録音開始完了 ===');
       console.log('出力ファイル:', this.currentFile);
       console.log('開始時刻:', new Date().toLocaleString());
     });
 
-    inputStream.on('stopComplete', () => {
+    this.currentInputStream.on('stopComplete', () => {
       console.log('録音ストリームが正常に停止しました');
     });
 
-    inputStream.on('processExitComplete', () => {
+    this.currentInputStream.on('processExitComplete', async () => {
       console.log('\n=== 録音プロセス終了 ===');
       const endTime = new Date();
       console.log('終了時刻:', endTime.toLocaleString());
@@ -213,24 +325,30 @@ export class AudioRecorder {
         const duration = (endTime - this.startTime) / 1000;
         console.log('録音時間:', duration.toFixed(1), '秒');
       }
+
+      // ファイルをアップロード
+      if (this.currentFile) {
+        try {
+          await this.uploadFile(this.currentFile);
+        } catch (error) {
+          console.error('ファイルのアップロードに失敗しました:', error);
+        }
+      }
     });
 
-    // 60秒ごとに新しいファイルを作成
-    const intervalId = setInterval(() => {
+    // 30秒ごとに新しいファイルを作成
+    this.currentInterval = setInterval(async () => {
       if (!this.isRecording) {
-        clearInterval(intervalId);
+        clearInterval(this.currentInterval);
         return;
       }
 
-      // 現在のファイルを閉じる
-      outputStream.end();
-
-      // 新しいファイルの準備
-      this.setupRecorder();
+      console.log('30秒経過しました。新しいファイルを作成します。');
+      await createNewRecording();
     }, config.audio.duration * 1000);
 
     // 録音ストリームをファイルに書き込む
-    inputStream.pipe(outputStream);
+    this.currentInputStream.pipe(this.currentOutputStream);
 
     // 録音開始
     this.recorder.start();
